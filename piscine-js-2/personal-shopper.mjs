@@ -1,0 +1,83 @@
+import { readFile, writeFile, rm } from "fs/promises";
+const file = (!process.argv[2] || process.argv[2].length === 0) ? 'help' : process.argv[2];
+const option = process.argv[3] ?? 'help';
+const item = process.argv[4];
+const num = process.argv[5];
+async function createFile(file) {
+    await writeFile(file, JSON.stringify({}));
+}
+async function removeFile(file) {
+    await rm(file, { force: true });
+}
+async function printShopList(file) {
+    readFile(file).then((content) => {
+        try {
+            let items = Object.entries(JSON.parse(content.toString()));
+            if (items.length === 0) { console.log(`Empty list.`); return; }
+            let listOutputForm = items.reduce((resStr, [name, quantity]) => `${resStr}- ${name} (${quantity})\n`, '');
+            console.log(listOutputForm)
+        } catch (e) { console.error('Invalide format of the list: ' + e.message); }
+    }).catch(e => console.error('Cannot read list: ' + e.message));
+}
+async function addItem(file, item, number) {
+    readFile(file)
+        .then((content) => {
+            if (content.length === 0) { return { [item]: number } }
+            let items = JSON.parse(content);
+            if (!items[item]) { items[item] = number; return items; }
+            items[item] += number;
+            return items;
+        })
+        .then((items) => { writeFile(file, JSON.stringify(items)); })
+        .catch((e) => { console.error('Invalide format of the list: ' + e.message); });
+}
+async function rmItem(file, item, number) {
+    readFile(file)
+        .then((content) => {
+            let items = JSON.parse(content);
+            if (!items[item]) return false;
+            if (items[item] <= number) {
+                delete items[item];
+            } else {
+                items[item] -= number;
+            }
+            return items;
+        })
+        .then((items) => {
+            if (items !== false) {
+                writeFile(file, JSON.stringify(items));
+            }
+        })
+        .catch((e) => { console.error('Invalide format of the list: ' + e.message); });
+}
+function printHelp() {
+    console.log(
+        ` Commands:
+- create: takes a file as argument and create it (should have '.json' extension specified)
+- delete: takes a file as argument and delete it
+- ls: takes a file as argument and print a list from the file in the console
+- add: add a new element to the list in the file; takes a number as element's quantity, default: 1
+- rm: decrease a given quantity of the element on the list in the file, if no quantity is specified it will remove the element from the list
+- help: print this message`
+    )
+}
+//----------------------------------------------------//
+if (file == 'help' || option == 'help') { printHelp(); process.exit(); }
+let number = parseInt(num);
+switch (option) {
+    case 'create': await createFile(file); break;
+    case 'delete': await removeFile(file); break;
+    case 'ls': await printShopList(file); break;
+    case 'add':
+        if (!item) { console.error('No elem specified.'); break; }
+        if (!number) number = 1;
+        if (number < 0) { await rmItem(file, item, -number) } else { await addItem(file, item, number); }
+        break;
+    case 'rm':
+        if (!item) { console.error('No elem specified.'); break }
+        if (num === undefined) { await rmItem(file, item, Infinity); break; }
+        if (isNaN(number)) { console.error('Unexpected request: nothing has been removed'); break }
+        if (number < 0) { await addItem(file, item, -number) } else { await rmItem(file, item, number); }
+        break;
+    default: console.error('Invalid option: ' + option);
+}
